@@ -1,0 +1,179 @@
+lstr_torikomi lstr_torikomi[]
+
+Integer li_RetValue, li_rtn
+Boolean lb_sheet_rtn
+Long ll_cnt
+String ls_ClipBoard
+
+Integer li_row, li_cnt, li_filenum
+
+String ls_rows
+
+String ls_himoku_name
+String ls_shosai_name
+String ls_himoku_id
+String ls_shosai_id
+String ls_user_id
+String ls_userid_new
+
+String ls_item_err = ""
+
+OLEObject excel
+
+//File path string is empty
+IF is_path='' THEN 
+MessageBox("エラー", "パスを選んでください", StopSign!, OK!)
+RETURN -1
+END IF
+
+
+//Creates excel object
+excel = CREATE OLEObject
+
+//Connects to excel object
+li_rtn = excel.ConnectToNewObject("excel.application")
+//Returns error if connection fails
+IF li_rtn <> 0 THEN
+	MessageBox("エラー", "Excelは実行できません。", StopSign!, OK!)
+	DESTROY excel
+	RETURN -1
+END IF
+
+//Checks to see if file exists under current path; return error if false
+IF FileExists(is_path) = FALSE THEN 
+	MessageBox("エラー", "取り込みファイルは存在しません。", StopSign!, OK!)
+	RETURN -1
+END IF
+
+excel.WorkBooks.Open(is_path)
+excel.Application.Visible = false
+excel.windowstate = 2 // 1 : Normal, 2 : Minimize, 3 : Maximize
+
+lb_sheet_rtn = excel.worksheets(1).Activate
+
+ls_ClipBoard = Clipboard()
+
+//Counts number of used rows
+il_xls_rows = excel.worksheets(1).Usedrange.rows.count
+ls_rows 	   = String(il_xls_rows)
+il_xls_rows = il_xls_rows -1//The first row is a header
+
+IF il_xls_rows = 0 THEN
+	MessageBox("エラー", "取り込めるデータがありません。", StopSign!, OK!)
+	RETURN -1
+ELSE	
+	MessageBox("取り込み結果",string(il_xls_rows)+ "行を取り込みます。")
+END IF
+
+//Sets and copies range of rows and columns into temporaty datawindow
+excel.Worksheets(1).Range("A2:G"+ ls_rows).Copy
+ll_cnt = dw_torikomi.importclipboard()
+
+Clipboard(ls_ClipBoard)
+
+IF ll_cnt < 1 THEN
+	Messagebox("エラー", "データをロードできませんでした。")
+	RETURN -1
+END IF
+excel.Application.Quit
+excel.DisConnectObject()
+DESTROY excel
+
+//Loop that converts and imports data into structure
+FOR li_row = 1 TO il_xls_rows
+	lstr_torikomi[li_row].st_userid = dw_torikomi.GetItemString(li_row, "userid")
+	lstr_torikomi[li_row].st_himoku = dw_torikomi.GetItemString(li_row, "himoku")
+	lstr_torikomi[li_row].st_shosai = dw_torikomi.GetItemString(li_row, "shosai")
+	lstr_torikomi[li_row].dt_day = dw_torikomi.GetItemDate(li_row, "day")
+	lstr_torikomi[li_row].st_nyukin = dw_torikomi.GetItemString(li_row, "nyukin")
+	lstr_torikomi[li_row].st_shukkin = dw_torikomi.GetItemString(li_row, "shukkin")
+	lstr_torikomi[li_row].st_biko = dw_torikomi.GetItemString(li_row, "biko")
+NEXT
+
+//Loop that selects remaining relevant data from database using data from the excel file and inserts everything into final datawindow
+//Also checks for formatting errors, collecting all errors into one error message
+FOR li_row = 1 TO il_xls_rows
+	
+	dw_list.InsertRow(0)
+	
+	ls_himoku_name	= ""
+	ls_shosai_name	= ""
+	ls_user_id			= lstr_torikomi[li_row].st_userid
+	ls_userid_new		= ""
+	
+	ls_himoku_id = lstr_torikomi[li_row].st_himoku
+	ls_shosai_id = lstr_torikomi[li_row].st_shosai
+	
+	SELECT HIMOKU.HIMOKU_NAME
+	INTO		:ls_himoku_name
+	FROM	HIMOKU
+	WHERE	HIMOKU.HIMOKU_ID 						= :ls_himoku_id
+	AND		HIMOKU.DEL_FLG 							= 0;
+	
+	SELECT HIMOKU_SHOSAI.SHOSAI_NAIYOU
+	INTO		:ls_shosai_name
+	FROM	HIMOKU_SHOSAI
+	WHERE	HIMOKU_SHOSAI.HIMOKU_SHOSAI_ID	= :ls_shosai_id
+	AND		HIMOKU_SHOSAI.DEL_FLG 				= 0;
+	
+	SELECT USER_MST.USER_ID
+	INTO		:ls_userid_new
+	FROM	USER_MST
+	WHERE	USER_MST.USER_ID	= :ls_user_id;
+	
+	IF lstr_torikomi[li_row].st_nyukin = "0" AND lstr_torikomi[li_row].st_shukkin = "0" THEN
+		MessageBox("エラー", "入出金を一つ入力してください。", StopSign!, OK!)
+		RETURN -1
+	END IF
+	
+	dw_list.SetItem(li_row, "day", lstr_torikomi[li_row].dt_day)		
+	
+	IF IsNumber(lstr_torikomi[li_row].st_nyukin) THEN
+		dw_list.SetItem(li_row, "nyukin", lstr_torikomi[li_row].st_nyukin)
+	ELSE
+		ls_item_err = ls_item_err + String(li_row) + "行目の[入金額]~n"
+	END IF
+	IF IsNumber(lstr_torikomi[li_row].st_shukkin) THEN
+	dw_list.SetItem(li_row, "shukkin", lstr_torikomi[li_row].st_shukkin)
+	ELSE
+		ls_item_err = ls_item_err + String(li_row) + "行目の[出金額]~n"
+	END IF
+	
+	IF IsNumber(lstr_torikomi[li_row].st_userid) = FALSE THEN	
+		ls_item_err = ls_item_err + String(li_row) + "行目の[ユーザID]~n"
+	ELSEIF ls_userid_new = "" THEN
+		ls_item_err = ls_item_err + String(li_row) + "行目の[ユーザID]は存在しない~n"
+	ELSE
+		dw_list.SetItem(li_row, "user_id", ls_userid_new)
+	END IF
+
+	IF IsNumber(lstr_torikomi[li_row].st_himoku) = FALSE THEN	
+		ls_item_err = ls_item_err + String(li_row) + "行目の[費目ID]~n"
+	ELSEIF ls_himoku_name = "" THEN
+		ls_item_err = ls_item_err + String(li_row) + "行目の[費目ID]は存在しない~n"
+	ELSE
+		dw_list.SetItem(li_row, "himoku_id", lstr_torikomi[li_row].st_himoku)
+	END IF
+
+	dw_list.SetItem(li_row, "himoku_name", ls_himoku_name)
+
+	IF IsNumber(lstr_torikomi[li_row].st_shosai) = FALSE THEN
+		ls_item_err = ls_item_err + String(li_row) + "行目の[費目詳細ID]~n"
+	ELSEIF ls_shosai_name = "" THEN
+		ls_item_err = ls_item_err + String(li_row) + "行目の[費目詳細ID]は存在しない~n"
+	ELSE
+		dw_list.SetItem(li_row, "shosai_id", lstr_torikomi[li_row].st_shosai)
+	END IF
+
+	dw_list.SetItem(li_row, "shosai_name", ls_shosai_name)
+	dw_list.SetItem(li_row, "biko", lstr_torikomi[li_row].st_biko)
+NEXT
+
+//Returns error if error message string is not empty
+IF ls_item_err <> "" THEN
+	MessageBox("エラー", "以下の項目はフォーマットが異なっています:~n" + ls_item_err, StopSign!, OK!)
+	RETURN -1
+END IF
+RETURN 0
+
+	
