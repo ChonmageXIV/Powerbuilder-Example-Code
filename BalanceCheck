@@ -1,0 +1,17 @@
+//Function that selects and compares desired expenses against current funds
+Long ll_nyukin
+Long ll_shukkin
+
+SELECT SUM(NYUKINGAKU), SUM(SHUKKINGAKU)
+INTO		:ll_nyukin, :ll_shukkin
+FROM		PBKADAI.NYUKIN
+WHERE 		DEL_FLG = 0;
+
+ll_shukkin = ll_shukkin + Long(sle_kingaku.Text)
+
+//Returns error if expense is bigger than funds
+IF ll_shukkin > ll_nyukin THEN
+	RETURN -1
+ELSE
+	RETURN 0
+END IF
