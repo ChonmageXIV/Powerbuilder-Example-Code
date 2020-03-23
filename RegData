@@ -1,3 +1,5 @@
+//Function that reads data from excel file and imports to datawindow
+
 lstr_torikomi lstr_torikomi[]
 
 Integer li_RetValue, li_rtn
