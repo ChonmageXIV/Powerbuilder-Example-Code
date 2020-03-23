@@ -1,0 +1,43 @@
+//Register function which activates on a button clicked event
+Integer	li_balance
+Integer	li_nyukinId
+
+//Selects ID of the last entry and increments by one
+SELECT MAX(NYUKIN_ID)
+INTO :li_nyukinId
+FROM NYUKIN;
+
+li_nyukinId = li_nyukinId +1
+
+//Income Mode (Radio Button)
+IF rb_nyukin.checked = TRUE THEN
+	//Inserts funds into database
+	INSERT INTO PBKADAI.NYUKIN (NYUKIN_ID, USER_ID, HIMOKU_ID, HIMOKU_SHOSAI_ID, NYUSHUTU_DAY, NYUKINGAKU, BIKO, DEL_FLG)
+	VALUES 	(:li_nyukinId, :gs_userId, :ls_himokuid, :ls_shosaiid, :ld_date, :ls_kingaku, :ls_bikou, '0');
+	//SQL error returns error
+	IF SQLCA.SQLCode < 0 THEN
+		MessageBox("エラー", "登録に失敗しました。", StopSign!, OK!)
+		RETURN -1
+	END IF
+	RETURN 0
+	
+//Expense Mode (Radio Button)
+ELSEIF rb_shukkin.checked = TRUE THEN
+	//Runs Balance Check function
+	li_balance = wf_balancechk()
+	//Positive balance resumes the entry
+	IF li_balance = 0 THEN
+		INSERT INTO PBKADAI.NYUKIN (NYUKIN_ID, USER_ID, HIMOKU_ID, HIMOKU_SHOSAI_ID, NYUSHUTU_DAY, SHUKKINGAKU, BIKO, DEL_FLG)
+		VALUES 	(:li_nyukinId, :gs_userId, :ls_himokuid, :ls_shosaiid,  :ld_date, :ls_kingaku, :ls_bikou, '0');
+		//SQL error returns error
+		IF SQLCA.SQLCode < 0 THEN
+			MessageBox("エラー", "登録に失敗しました。", StopSign!, OK!)
+			RETURN -1
+		END IF
+		RETURN 0
+	//Negative balance returns error
+	ELSE
+		MessageBox("エラー", "以上の登録でマイナスになるため登録ができません。", StopSign!, OK!)
+		RETURN -1
+	END IF
+END IF
